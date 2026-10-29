@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>英検4級 シューティングゲーム - SORAと宇宙大冒険</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Zen+Maru+Gothic:wght@500;700;900&display=swap');
+    
+    body {
+      font-family: 'Zen Maru Gothic', 'Fredoka', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    
+    canvas {
+      display: block;
+      background: #030712;
+    }
+
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen flex flex-col items-center justify-center p-2 sm:p-4 overflow-hidden">
+
+  <!-- Game Container -->
+  <div class="relative w-full max-w-4xl bg-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-indigo-900/50 flex flex-col">
+    
+    <!-- Header Controls & Status -->
+    <div class="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800 z-10">
+      <div class="flex items-center space-x-2">
+        <span class="text-xl sm:text-2xl font-black text-amber-400 drop-shadow">SCORE: <span id="scoreDisplay">0</span></span>
+      </div>
+      <div id="questionCounter" class="text-xs sm:text-base font-bold text-slate-300">
+        問題 <span id="currentQNum">1</span> / 10
+      </div>
+      <div class="flex items-center space-x-1 sm:space-x-2">
+        <button id="soundToggleBtn" onclick="toggleSound()" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 transition">
+          🔊
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Canvas Area -->
+    <div class="relative w-full aspect-[16/9] min-h-[320px] max-h-[520px] overflow-hidden bg-black">
+      <canvas id="gameCanvas" class="w-full h-full"></canvas>
+
+      <!-- Overlay: Start Screen -->
+      <div id="startOverlay" class="absolute inset-0 flex flex-col items-center justify-center glass-panel z-20 p-6 text-center">
+        <h1 class="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-sky-300 via-amber-200 to-sky-400 mb-3 drop-shadow-lg">
+          英検4級 シューティング
+        </h1>
+        <p class="text-sm sm:text-lg text-slate-200 max-w-md mb-6 leading-relaxed">
+          SORA（ソラ）と一緒に宇宙の星に書かれた英単語を狙撃しよう！<br>
+          正しい答えの「星」を撃つと <span class="text-amber-400 font-bold">+10pt</span> 得点！
+        </p>
+        <button onclick="startGame()" class="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xl rounded-full shadow-lg hover:shadow-cyan-500/50 transform hover:-translate-y-1 active:translate-y-0 transition">
+          ゲームスタート 🚀
+        </button>
+      </div>
+
+      <!-- Overlay: Result Screen -->
+      <div id="resultOverlay" class="hidden absolute inset-0 flex flex-col items-center justify-center glass-panel z-20 p-6 text-center">
+        <h2 class="text-2xl sm:text-4xl font-black text-amber-300 mb-2">STAGE CLEAR!</h2>
+        <div class="text-lg text-slate-300 mb-4">あなたのスコア</div>
+        <div id="finalScore" class="text-5xl sm:text-7xl font-black text-amber-400 mb-6 drop-shadow-lg">100</div>
+        <div id="rankText" class="text-base sm:text-xl font-bold text-sky-200 mb-8">素晴らしい成績です！</div>
+        <button onclick="startGame()" class="px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-black text-xl rounded-full shadow-lg transform hover:-translate-y-1 transition">
+          もう一度あそぶ 🔄
+        </button>
+      </div>
+
+      <!-- Floating Feedback (◯ / ✕) -->
+      <div id="feedbackMark" class="pointer-events-none absolute inset-0 flex items-center justify-center text-8xl sm:text-9xl font-black z-30 transition-all duration-300 opacity-0 scale-50">
+      </div>
+    </div>
+
+    <!-- Bottom Question Panel & Timer Bar -->
+    <div class="bg-slate-900 border-t border-slate-800 p-3 sm:p-4 z-10">
+      <!-- Time Progress Bar -->
+      <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden mb-3 border border-slate-700">
+        <div id="timerBar" class="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 w-full transition-all duration-100 ease-linear"></div>
+      </div>
+
+      <!-- Question Text Box -->
+      <div class="glass-panel rounded-xl p-3 sm:p-4 text-center min-h-[70px] flex items-center justify-center">
+        <p id="questionText" class="text-base sm:text-xl font-bold text-sky-100 leading-snug">
+          ゲームをスタートしてください！
+        </p>
+      </div>
+    </div>
+
+    <!-- Mobile Touch Controls -->
+    <div class="sm:hidden grid grid-cols-3 gap-2 p-3 bg-slate-950 border-t border-slate-800 text-slate-300">
+      <div class="col-span-1 grid grid-rows-2 gap-1">
+        <button id="btnUp" class="bg-slate-800 active:bg-sky-600 rounded-lg p-2 text-center font-bold text-xl">▲</button>
+        <button id="btnDown" class="bg-slate-800 active:bg-sky-600 rounded-lg p-2 text-center font-bold text-xl">▼</button>
+      </div>
+      <div class="col-span-1 grid grid-cols-2 gap-1">
+        <button id="btnLeft" class="bg-slate-800 active:bg-sky-600 rounded-lg p-2 text-center font-bold text-xl">◀</button>
+        <button id="btnRight" class="bg-slate-800 active:bg-sky-600 rounded-lg p-2 text-center font-bold text-xl">▶</button>
+      </div>
+      <button id="btnShoot" class="col-span-1 bg-gradient-to-r from-amber-500 to-red-500 active:from-amber-600 text-white font-black rounded-lg text-lg flex items-center justify-center">
+        SHOT ⚡
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    // --- Questions Data (Eiken Level 4) ---
+    const questionsData = [
+      {
+        question: "(1) A : Are you in a rock ( )?\nB : Yes, I play the guitar.",
+        options: ["1.band", "2.top", "3.time", "4.part"],
+        answer: 0
+      },
+      {
+        question: "(2) A : How old is your ( ) brother?\nB : He’s six. He loves to read books.",
+        options: ["1.little", "2.long", "3.less", "4.left"],
+        answer: 0
+      },
+      {
+        question: "(3) When Tim plays video games, he often ( ) to do his homework. His mother is not happy.",
+        options: ["1.finds", "2.hears", "3.crosses", "4.forgets"],
+        answer: 3
+      },
+      {
+        question: "(4) Steve bought a popular ( ) about animals. Now, he studies a lot of interesting animal facts.",
+        options: ["1.sandwich", "2.mountain", "3.magazine", "4.stadium"],
+        answer: 2
+      },
+      {
+        question: "(5) A : ( ) your teeth before you go to bed.\nB : I know, Mom.",
+        options: ["1.Follow", "2.Grow", "3.Move", "4.Brush"],
+        answer: 3
+      },
+      {
+        question: "(6) A : Where are you going, Mike?\nB : To the post office. I want to ( ) this letter to my uncle.",
+        options: ["1.send", "2.buy", "3.clean", "4.stop"],
+        answer: 0
+      },
+      {
+        question: "(7) Mr. and Mrs. Williams both have jobs, so they do the ( ) together on the weekend.",
+        options: ["1.weather", "2.story", "3.hometown", "4.housework"],
+        answer: 3
+      },
+      {
+        question: "(8) A : It’s a nice day today.\nB : Yes, it is. Let’s ( ) a short walk before dinner.",
+        options: ["1.close", "2.take", "3.like", "4.ride"],
+        answer: 1
+      },
+      {
+        question: "(9) A : I’m going to go on a ( ) to France this summer.\nB : That’s great. You’ll have a wonderful time.",
+        options: ["1.music", "2.trip", "3.present", "4.flower"],
+        answer: 1
+      },
+      {
+        question: "(10) A : Do you want to play tennis today?\nB : Yes. I can play ( ) the afternoon.",
+        options: ["1.in", "2.on", "3.at", "4.to"],
+        answer: 0
+      }
+    ];
+
+    // --- Guaranteed SORA Vector Image Data (SVG Data URL) ---
+    const soraSvgData = `data:image/svg+xml;utf8,` + encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160">
+        <g stroke="#3B82F6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Sparkles -->
+          <path d="M 20 50 L 32 40 M 15 35 L 28 32 M 22 20 L 30 25" fill="none" />
+          <path d="M 180 50 L 168 40 M 185 35 L 172 32 M 178 20 L 170 25" fill="none" />
+          
+          <!-- Cloud Body -->
+          <path d="M 45 110 
+                   C 20 110, 15 80, 35 65 
+                   C 25 40, 55 20, 85 30 
+                   C 105 10, 145 15, 155 40 
+                   C 180 45, 185 75, 165 95 
+                   C 180 120, 150 135, 125 125 
+                   C 105 135, 65 135, 45 110 Z" 
+                fill="#FFFFFF" />
+          
+          <!-- Rosy Cheeks -->
+          <ellipse cx="60" cy="85" rx="12" ry="8" fill="#FDA4AF" stroke="none" />
+          <ellipse cx="140" cy="85" rx="12" ry="8" fill="#FDA4AF" stroke="none" />
+
+          <!-- Eyes (Happy Arcs) -->
+          <path d="M 68 70 Q 78 58 88 70" fill="none" stroke-width="5" />
+          <path d="M 112 70 Q 122 58 132 70" fill="none" stroke-width="5" />
+          <path d="M 66 52 Q 74 46 82 50" fill="none" stroke-width="3" />
+          <path d="M 118 50 Q 126 46 134 52" fill="none" stroke-width="3" />
+
+          <!-- Smile -->
+          <path d="M 88 80 Q 100 100 112 80 Z" fill="#E11D48" />
+
+          <!-- Bandana -->
+          <path d="M 45 95 C 70 125, 130 125, 155 95 C 130 112, 70 112, 45 95 Z" fill="#60A5FA" />
+          <path d="M 82 110 Q 75 125 80 135 Q 88 128 86 112 Z" fill="#3B82F6" />
+
+          <!-- Bandana Text "SORA" -->
+          <text x="122" y="112" font-family="Arial, sans-serif" font-weight="900" font-size="14" fill="#FFFFFF" stroke="none" text-anchor="middle" transform="rotate(-8, 122, 112)">SORA</text>
+        </g>
+      </svg>
+    `);
+
+    // --- Player Image Settings ---
+    const playerImage = new Image();
+    let isPlayerImageLoaded = false;
+
+    playerImage.onload = () => {
+      isPlayerImageLoaded = true;
+    };
+    playerImage.src = 'cloud_fixed_final.png';
+
+    // --- Audio Synthesizer ---
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+    let isMuted = false;
+
+    function initAudio() {
+      if (!audioCtx) audioCtx = new AudioCtx();
+    }
+
+    function toggleSound() {
+      isMuted = !isMuted;
+      document.getElementById('soundToggleBtn').innerText = isMuted ? '🔇' : '🔊';
+    }
+
+    function playSound(type) {
+      if (isMuted) return;
+      initAudio();
+      if (!audioCtx) return;
+
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      const now = audioCtx.currentTime;
+
+      if (type === 'shoot') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.12);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      } else if (type === 'correct') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.setValueAtTime(659.25, now + 0.1);
+        osc.frequency.setValueAtTime(783.99, now + 0.2);
+        osc.frequency.setValueAtTime(1046.50, now + 0.3);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+      } else if (type === 'wrong') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.setValueAtTime(180, now + 0.15);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      }
+    }
+
+    // --- Game Variables & State ---
+    let canvas, ctx;
+    let gameState = 'START';
+    let score = 0;
+    let currentQuestionIndex = 0;
+    let questionTimer = 0;
+    const TIME_LIMIT_PER_QUESTION = 15;
+    let lastTime = 0;
+
+    let starBg = [];
+    let particles = [];
+    let bullets = [];
+    let enemies = [];
+
+    // Keys State
+    const keys = { Up: false, Down: false, Left: false, Right: false, Space: false };
+
+    // Player Object
+    const player = {
+      x: 80,
+      y: 200,
+      width: 120,
+      height: 90,
+      speed: 6.5,
+      bobAngle: 0
+    };
+
+    // Initialize Canvas & Game
+    window.onload = function() {
+      canvas = document.getElementById('gameCanvas');
+      ctx = canvas.getContext('2d');
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      initStarBackground();
+      setupEventListeners();
+
+      // Start game loop directly without pre-rendering cache
+      lastTime = performance.now();
+      requestAnimationFrame(gameLoop);
+    };
+
+    function resizeCanvas() {
+      const container = canvas.parentElement;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+    }
+
+    function initStarBackground() {
+      starBg = [];
+      for (let i = 0; i < 80; i++) {
+        starBg.push({
+          x: Math.random() * 1000,
+          y: Math.random() * 600,
+          size: Math.random() * 2 + 1,
+          speed: Math.random() * 1.5 + 0.5
+        });
+      }
+    }
+
+    // Input Listeners
+    function setupEventListeners() {
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'ArrowUp' || e.code === 'KeyW') keys.Up = true;
+        if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.Down = true;
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.Left = true;
+        if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.Right = true;
+        if (e.code === 'Space') {
+          if (!keys.Space && gameState === 'PLAYING') shootBullet();
+          keys.Space = true;
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        if (e.code === 'ArrowUp' || e.code === 'KeyW') keys.Up = false;
+        if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.Down = false;
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.Left = false;
+        if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.Right = false;
+        if (e.code === 'Space') keys.Space = false;
+      });
+
+      // Touch controls
+      const bindBtn = (id, keyName) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyName] = true; });
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[keyName] = false; });
+      };
+      bindBtn('btnUp', 'Up');
+      bindBtn('btnDown', 'Down');
+      bindBtn('btnLeft', 'Left');
+      bindBtn('btnRight', 'Right');
+
+      const shootBtn = document.getElementById('btnShoot');
+      if (shootBtn) {
+        shootBtn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          if (gameState === 'PLAYING') shootBullet();
+        });
+      }
+    }
+
+    // Start Game
+    function startGame() {
+      initAudio();
+      score = 0;
+      currentQuestionIndex = 0;
+      gameState = 'PLAYING';
+      
+      document.getElementById('scoreDisplay').innerText = score;
+      document.getElementById('startOverlay').classList.add('hidden');
+      document.getElementById('resultOverlay').classList.add('hidden');
+
+      player.x = 80;
+      player.y = canvas.height / 2 - player.height / 2;
+
+      loadQuestion(currentQuestionIndex);
+    }
+
+    function loadQuestion(index) {
+      if (index >= questionsData.length) {
+        endGame();
+        return;
+      }
+
+      const q = questionsData[index];
+      document.getElementById('currentQNum').innerText = index + 1;
+      document.getElementById('questionText').innerText = q.question;
+
+      bullets = [];
+      enemies = [];
+      questionTimer = TIME_LIMIT_PER_QUESTION;
+
+      // Create 4 Star Enemies
+      const totalEnemies = q.options.length;
+      const paddingY = canvas.height / (totalEnemies + 1);
+
+      for (let i = 0; i < totalEnemies; i++) {
+        enemies.push({
+          x: canvas.width + 60 + (i * 20),
+          targetX: canvas.width - 150 - (i % 2 === 0 ? 0 : 40),
+          y: paddingY * (i + 1),
+          baseY: paddingY * (i + 1),
+          width: 100,
+          height: 100,
+          text: q.options[i],
+          optionIndex: i,
+          isCorrect: i === q.answer,
+          floatOffset: Math.random() * Math.PI * 2,
+          color: '#FACC15'
+        });
+      }
+    }
+
+    function shootBullet() {
+      playSound('shoot');
+      bullets.push({
+        x: player.x + player.width - 10,
+        y: player.y + player.height / 2,
+        speed: 12,
+        radius: 6
+      });
+    }
+
+    // Game Loop
+    function gameLoop(timestamp) {
+      const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+      lastTime = timestamp;
+
+      update(dt);
+      render();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function update(dt) {
+      // Background Star Animation
+      starBg.forEach(star => {
+        star.x -= star.speed;
+        if (star.x < 0) star.x = canvas.width;
+      });
+
+      if (gameState !== 'PLAYING') return;
+
+      // Timer Countdown
+      questionTimer -= dt;
+      if (questionTimer <= 0) {
+        questionTimer = 0;
+        handleAnswer(false, null);
+      }
+
+      // Update Timer Progress Bar
+      const timerPercent = (questionTimer / TIME_LIMIT_PER_QUESTION) * 100;
+      const timerBar = document.getElementById('timerBar');
+      timerBar.style.width = timerPercent + '%';
+      if (timerPercent < 30) {
+        timerBar.className = "h-full bg-gradient-to-r from-red-500 to-rose-600 transition-all duration-100 ease-linear";
+      } else {
+        timerBar.className = "h-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all duration-100 ease-linear";
+      }
+
+      // Player Movement
+      if (keys.Up) player.y -= player.speed;
+      if (keys.Down) player.y += player.speed;
+      if (keys.Left) player.x -= player.speed;
+      if (keys.Right) player.x += player.speed;
+
+      // Boundaries
+      player.x = Math.max(10, Math.min(canvas.width - player.width - 10, player.x));
+      player.y = Math.max(10, Math.min(canvas.height - player.height - 10, player.y));
+      player.bobAngle += dt * 4;
+
+      // Update Bullets
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.x += b.speed;
+
+        // Collision Check with Star Enemies
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          const dist = Math.hypot(b.x - e.x, b.y - e.y);
+          if (dist < e.width / 2 + b.radius) {
+            // Hit Enemy!
+            createExplosion(e.x, e.y, e.isCorrect ? '#34D399' : '#F87171');
+            bullets.splice(i, 1);
+            handleAnswer(e.isCorrect, e);
+            return;
+          }
+        }
+
+        if (b.x > canvas.width + 20) bullets.splice(i, 1);
+      }
+
+      // Update Enemies Floating Motion
+      enemies.forEach(e => {
+        if (e.x > e.targetX) e.x -= 3;
+        e.y = e.baseY + Math.sin(player.bobAngle + e.floatOffset) * 8;
+      });
+
+      // Update Particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.alpha -= dt * 1.5;
+        if (p.alpha <= 0) particles.splice(i, 1);
+      }
+    }
+
+    function handleAnswer(isCorrect, enemyObj) {
+      if (isCorrect) {
+        score += 10;
+        document.getElementById('scoreDisplay').innerText = score;
+        playSound('correct');
+        showFeedback('◯', 'text-emerald-400');
+      } else {
+        playSound('wrong');
+        showFeedback('✕', 'text-rose-500');
+      }
+
+      currentQuestionIndex++;
+      setTimeout(() => {
+        loadQuestion(currentQuestionIndex);
+      }, 800);
+    }
+
+    function showFeedback(text, colorClass) {
+      const fb = document.getElementById('feedbackMark');
+      fb.innerText = text;
+      fb.className = `pointer-events-none absolute inset-0 flex items-center justify-center text-8xl sm:text-9xl font-black z-30 transition-all duration-300 ${colorClass} opacity-100 scale-100 drop-shadow-2xl`;
+      setTimeout(() => {
+        fb.className = `pointer-events-none absolute inset-0 flex items-center justify-center text-8xl sm:text-9xl font-black z-30 transition-all duration-300 ${colorClass} opacity-0 scale-50`;
+      }, 600);
+    }
+
+    function createExplosion(x, y, color) {
+      for (let i = 0; i < 20; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 6 + 2;
+        particles.push({
+          x: x,
+          y: y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          size: Math.random() * 4 + 2,
+          color: color,
+          alpha: 1.0
+        });
+      }
+    }
+
+    function endGame() {
+      gameState = 'END';
+      document.getElementById('finalScore').innerText = score;
+      const rankText = document.getElementById('rankText');
+      if (score >= 90) rankText.innerText = "PERFECT! 素晴らしい英語力です！🌟";
+      else if (score >= 60) rankText.innerText = "GREAT! 合格ライン達成です！👏";
+      else rankText.innerText = "もう一度チャレンジして満点を目指そう！💪";
+      
+      document.getElementById('resultOverlay').classList.remove('hidden');
+    }
+
+    // Main Render Loop
+    function render() {
+      // Clear Screen
+      ctx.fillStyle = '#030712';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Render Stars
+      ctx.fillStyle = '#FFFFFF';
+      starBg.forEach(star => {
+        ctx.globalAlpha = Math.random() * 0.5 + 0.5;
+        ctx.fillRect(star.x, star.y, star.size, star.size);
+      });
+      ctx.globalAlpha = 1.0;
+
+      if (gameState === 'PLAYING') {
+        // Draw Player (Using attached Image)
+        drawSora(player.x, player.y, player.width, player.height);
+
+        // Draw Bullets
+        ctx.fillStyle = '#38BDF8';
+        bullets.forEach(b => {
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Draw Star Enemies
+        enemies.forEach(e => drawStarEnemy(e));
+
+        // Draw Explosion Particles
+        particles.forEach(p => {
+          ctx.save();
+          ctx.globalAlpha = p.alpha;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        });
+      }
+    }
+
+    // Draw Player using Image File directly
+    function drawSora(x, y, width, height) {
+      ctx.save();
+      const bobY = Math.sin(player.bobAngle) * 4;
+
+      if (isPlayerImageLoaded) {
+        ctx.drawImage(playerImage, x, y + bobY, width, height);
+      } else {
+        // 予備描画
+        ctx.fillStyle = '#60A5FA';
+        ctx.beginPath();
+        ctx.roundRect(x, y + bobY, width, height, 16);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    // Draw 5-Pointed Star Enemy
+    function drawStarEnemy(e) {
+      ctx.save();
+      ctx.translate(e.x, e.y);
+
+      // Draw Star Shape
+      ctx.shadowColor = e.color;
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = e.color;
+
+      ctx.beginPath();
+      const points = 5;
+      const outerR = e.width / 2;
+      const innerR = outerR * 0.5;
+
+      for (let i = 0; i < points * 2; i++) {
+        const r = i % 2 === 0 ? outerR : innerR;
+        const a = (i * Math.PI) / points - Math.PI / 2;
+        const sx = Math.cos(a) * r;
+        const sy = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Text Label on Top
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#0F172A';
+      ctx.font = 'bold 15px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(e.text, 0, 0);
+
+      ctx.restore();
+    }
+  </script>
+</body>
+</html>
